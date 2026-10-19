@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>REBOUND — 2D İzometrik Fizik Tabanlı Arcade Futbol</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <!-- High-Performance HTML5 Canvas (Isometric 30° Projection) -->
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- IN-GAME HUD -->
+  <div id="hudLayer" class="hud-layer hidden">
+    <!-- Top Scoreboard -->
+    <div class="scoreboard-wrap">
+      <div class="scoreboard">
+        <div class="team-panel team-orange">
+          <span class="team-name">TURUNCU</span>
+          <span id="scoreOrange" class="team-score">0</span>
+        </div>
+
+        <div class="clock-panel">
+          <div id="matchPhaseBadge" class="phase-badge">ZERO-STOPPAGE 3v3</div>
+          <div id="matchClock" class="match-clock">03:00</div>
+          <div id="overtimeBoostBadge" class="boost-badge hidden">ŞUT HIZI: %110</div>
+        </div>
+
+        <div class="team-panel team-blue">
+          <span id="scoreBlue" class="team-score">0</span>
+          <span class="team-name">MAVİ</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Top-Right Telemetry & Quick Controls -->
+    <div class="telemetry-bar">
+      <div class="net-stats">
+        <span id="netModeBadge" class="net-pill">CSP + SERVER</span>
+        <span id="pingStat">PING: 0ms</span>
+        <span id="fpsStat">60 FPS</span>
+        <span class="net-packet-info">60Hz / 30Hz (68B)</span>
+      </div>
+      <div class="top-actions">
+        <button id="btnToggleSound" class="hud-btn" title="Sesi Aç/Kapat">SES: AÇIK</button>
+        <button id="btnSwitchRoleHud" class="hud-btn" title="Rol Değiştir (1-6 Tuşları)">ROL DEĞİŞTİR [TAB]</button>
+        <button id="btnLeaveMatch" class="hud-btn hud-btn-danger">LOBİYE DÖN [ESC]</button>
+      </div>
+    </div>
+
+    <!-- Goal / Golden Goal Announcement Banner -->
+    <div id="centerBanner" class="center-banner hidden">
+      <div id="bannerTitle" class="banner-title">GOL!</div>
+      <div id="bannerSub" class="banner-sub">TURUNCU TAKIM SKOR YAPTI</div>
+    </div>
+
+    <!-- Bottom Contextual Input Matrix HUD (GDD Section 3) -->
+    <div class="context-hud-wrap">
+      <div id="contextModeHeader" class="context-mode-header mode-defense">
+        <span id="contextBadgeDot" class="context-dot"></span>
+        <span id="contextModeTitle">SAVUNMA MODU (TOPSUZ)</span>
+        <span id="contextPassiveInfo" class="context-passive"></span>
+      </div>
+      <div class="context-keys-row">
+        <div class="key-card">
+          <kbd>W A S D</kbd>
+          <div class="key-desc">
+            <strong id="lblWasdTitle">8 Yönlü Hareket</strong>
+            <span id="lblWasdSub">Tam Hız (1.0x) & Yönlenme</span>
+          </div>
+        </div>
+        <div class="key-card" id="cardKeyJ">
+          <kbd>J</kbd>
+          <div class="key-desc">
+            <strong id="lblJTitle">Ayak Koyma / Pres</strong>
+            <span id="lblJSub">Manyetik bağı koparır (0.5s CD)</span>
+          </div>
+        </div>
+        <div class="key-card" id="cardKeyK">
+          <kbd>K</kbd>
+          <div class="key-desc">
+            <strong id="lblKTitle">Ayağa Kayma (Slide)</strong>
+            <span id="lblKSub">1.8x İvme | 16f Stun / 26f Ceza</span>
+          </div>
+        </div>
+        <div class="key-card" id="cardKeyL">
+          <kbd>L</kbd>
+          <div class="key-desc">
+            <strong id="lblLTitle">Omuz Omuza (Jockey)</strong>
+            <span id="lblLSub">Fiziksel denge & ikili mücadele</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN LOBBY & ROOM OVERLAY (GDD Section 6: Link & Play) -->
+  <div id="lobbyOverlay" class="overlay-backdrop">
+    <div class="lobby-container">
+      <!-- Header -->
+      <header class="lobby-header">
+        <div class="brand-logo">
+          <span class="logo-accent-orange">RE</span><span class="logo-accent-blue">BOUND</span>
+          <span class="version-tag">30° İZOMETRİK NEO-ARCADE FUTBOL</span>
+        </div>
+        <p class="brand-tagline">
+          Sıfır Duraksama (Zero-Stoppage) • Elastik Duvarlar ($e=0.88$) • Soft-Magnet Top Sürme • Bölge Korumalı Kaleci
+        </p>
+      </header>
+
+      <!-- Main Lobby View -->
+      <div id="mainLobbyView" class="lobby-grid">
+        <!-- Left Column: Nickname & Quick Play / Room Creation -->
+        <div class="lobby-panel">
+          <h2>OYUNCU GİRİŞİ & HIZLI BAŞLAT</h2>
+          <label class="field-label" for="playerNameInput">TAKMA ADINIZ (Sıfır Sürtünmeli Giriş)</label>
+          <input id="playerNameInput" type="text" maxlength="16" placeholder="Takma adınızı girin..." value="Kaptan" />
+
+          <div class="action-stack">
+            <button id="btnQuickMatch" class="btn btn-primary btn-large">
+              HEMEN 3v3 MAÇA GİR (ONLINE / BOT DESTEKLİ)
+            </button>
+            <button id="btnCreateRoom" class="btn btn-secondary">
+              + YENİ ODA KUR (LINK & PLAY)
+            </button>
+            <button id="btnSandboxMode" class="btn btn-outline">
+              SERBEST ANTRENMAN & FİZİK SANDBOX (0ms YEREL)
+            </button>
+          </div>
+
+          <div class="join-by-code-box">
+            <label class="field-label" for="roomCodeInput">ODA KODU VEYA LİNK İLE KATIL</label>
+            <div class="code-input-row">
+              <input id="roomCodeInput" type="text" maxlength="12" placeholder="Örn: ANK-4091" />
+              <button id="btnJoinByCode" class="btn btn-accent">ODAYA GİR</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Column: Open Lobby List -->
+        <div class="lobby-panel">
+          <div class="panel-header-row">
+            <h2>AÇIK LOBİLER (3v3 ODALAR)</h2>
+            <button id="btnRefreshRooms" class="btn-small">YENİLE</button>
+          </div>
+          <div id="roomListContainer" class="room-list">
+            <!-- Populated dynamically -->
+          </div>
+
+          <!-- GDD Contextual Input Matrix Summary -->
+          <div class="matrix-mini-card">
+            <h3>BAĞLAMSAL KONTROL MATRİSİ (WASD + J, K, L)</h3>
+            <table class="matrix-table">
+              <thead>
+                <tr>
+                  <th>Tuş</th>
+                  <th>Hücum (Toplu)</th>
+                  <th>Savunma (Topsuz)</th>
+                  <th>Ceza Sahası (Kaleci)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><kbd>J</kbd></td>
+                  <td>Yerden Pas / Şarjlı Şut</td>
+                  <td>Ayak Koyma (Pres)</td>
+                  <td>Ayak Koyma (Pres)</td>
+                </tr>
+                <tr>
+                  <td><kbd>K</kbd></td>
+                  <td>Aşırtma Pas (Z-Lob)</td>
+                  <td>Ayağa Kayma (16f Stun)</td>
+                  <td><strong>Plonjon / Uzanma (Dive)</strong></td>
+                </tr>
+                <tr>
+                  <td><kbd>L</kbd></td>
+                  <td>Dürtme / Şut İptali</td>
+                  <td>Omuz Omuza (Jockey)</td>
+                  <td>Pozisyon Düzeltme</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Room Staging View (Inside Room Before Match Starts) -->
+      <div id="roomStagingView" class="room-staging hidden">
+        <div class="staging-top-bar">
+          <div>
+            <span class="staging-label">ODA KODU:</span>
+            <strong id="stagingRoomCode" class="staging-code">ANK-4091</strong>
+          </div>
+          <div class="share-link-box">
+            <input id="stagingShareUrl" type="text" readonly value="http://localhost:3000/room/ANK-4091" />
+            <button id="btnCopyRoomLink" class="btn btn-accent">LİNKİ KOPYALA</button>
+          </div>
+        </div>
+
+        <div class="teams-staging-grid">
+          <!-- Orange Team -->
+          <div class="team-staging-col team-col-orange">
+            <h3>TURUNCU TAKIM (SOL SAHA)</h3>
+            <div id="slotsOrange" class="slots-list"></div>
+          </div>
+
+          <!-- VS Divider -->
+          <div class="vs-divider">
+            <span>3v3</span>
+            <small>İLK 3 GOL veya 3 DK</small>
+          </div>
+
+          <!-- Blue Team -->
+          <div class="team-staging-col team-col-blue">
+            <h3>ELEKTRİK MAVİSİ (SAĞ SAHA)</h3>
+            <div id="slotsBlue" class="slots-list"></div>
+          </div>
+        </div>
+
+        <div class="staging-footer">
+          <label class="bot-toggle-label">
+            <input type="checkbox" id="chkFillBots" checked />
+            <span>Boş kalan 3v3 pozisyonlarını Taktiksel Yapay Zeka (GK / MID / FWD Bot) ile tamamla</span>
+          </label>
+          <div class="staging-actions">
+            <button id="btnLeaveRoom" class="btn btn-outline">ODADAN AYRIL</button>
+            <button id="btnStartMatchNow" class="btn btn-primary btn-large">MAÇI ŞİMDİ BAŞLAT</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/shared/physics.js"></script>
+  <script src="/audio.js"></script>
+  <script src="/client.js"></script>
+</body>
+</html>
